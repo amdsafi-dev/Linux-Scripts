@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  keytab-sim:
+    build:
+      context: ..
+      dockerfile: simulation/Dockerfile
+    container_name: rhel-keytab-simulator
+    stdin_open: true
+    tty: true
+    volumes:
+      - ..:/workspace
+    working_dir: /workspace
+    command: /bin/bash
