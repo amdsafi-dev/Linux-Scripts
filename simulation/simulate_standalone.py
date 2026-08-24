@@ -41,6 +41,15 @@ MOCK_KEYTABS = {
         {"slot": 1, "kvno": 1, "timestamp": "08/17/26 10:00:00", "principal": "hive/hiveserver2.example.corp@EXAMPLE.CORP", "enctype": "aes256-cts-hmac-sha1-96"},
         {"slot": 2, "kvno": 1, "timestamp": "08/17/26 10:00:00", "principal": "hive/hiveserver2.example.corp@EXAMPLE.CORP", "enctype": "aes128-cts-hmac-sha1-96"},
     ],
+    "/etc/security/keytabs/nfs_service.keytab": [
+        {"slot": 1, "kvno": 1, "timestamp": "08/17/26 10:00:00", "principal": "nfs/storage01.example.corp@EXAMPLE.CORP", "enctype": "arcfour-hmac"},
+        {"slot": 2, "kvno": 1, "timestamp": "08/17/26 10:00:00", "principal": "host/client01.example.corp@EXAMPLE.CORP", "enctype": "arcfour-hmac"},
+    ],
+    "/tmp/incoming_keytabs/new_aes_nfs.keytab": [
+        {"slot": 1, "kvno": 2, "timestamp": "08/24/26 11:00:00", "principal": "nfs/storage01.example.corp@EXAMPLE.CORP", "enctype": "aes256-cts-hmac-sha1-96"},
+        {"slot": 2, "kvno": 2, "timestamp": "08/24/26 11:00:00", "principal": "nfs/storage01.example.corp@EXAMPLE.CORP", "enctype": "aes128-cts-hmac-sha1-96"},
+        {"slot": 3, "kvno": 2, "timestamp": "08/24/26 11:00:00", "principal": "HTTP/storage01.example.corp@EXAMPLE.CORP", "enctype": "aes256-cts-hmac-sha1-96"},
+    ],
     "/etc/security/keytabs/appuser.keytab": [
         {"slot": 1, "kvno": 3, "timestamp": "08/17/26 10:00:00", "principal": "svc_etl_prod@EXAMPLE.CORP", "enctype": "aes256-cts-hmac-sha1-96"},
         {"slot": 2, "kvno": 3, "timestamp": "08/17/26 10:00:00", "principal": "svc_etl_prod@EXAMPLE.CORP", "enctype": "aes128-cts-hmac-sha1-96"},
@@ -51,7 +60,14 @@ MOCK_KEYTABS = {
     ]
 }
 
-MOCK_BACKUPS = {}
+MOCK_NFS_MOUNTS = {
+    "/mnt/nfs_finance": {"device": "nfs-server01.example.corp:/exports/finance", "type": "nfs", "opts": "rw,sec=krb5,hard,intr", "size": "500G", "used": "210G", "avail": "290G", "pcent": "42%"},
+    "/mnt/nfs_data": {"device": "nfs-server01.example.corp:/exports/data", "type": "nfs", "opts": "ro,sec=krb5,hard,intr", "size": "2.0T", "used": "1.1T", "avail": "900G", "pcent": "55%"},
+    "/mnt/cifs_reports": {"device": "//win-nas01.example.corp/reports", "type": "cifs", "opts": "rw,sec=krb5,vers=3.0", "size": "1.0T", "used": "450G", "avail": "550G", "pcent": "45%"}
+}
+
+MOCK_INPLACE_BACKUPS = {}
+MOCK_SNAPSHOTS = {}
 
 def clear_screen():
     os.system("cls" if os.name == "nt" else "clear")
@@ -320,36 +336,153 @@ def option_restore_keytab():
     render_klist(custom_dest, MOCK_KEYTABS[custom_dest])
     press_enter()
 
+def option_merge_keytabs():
+    print_banner()
+    print(f"{C_BOLD}{C_CYAN}[MIGRATION] Merge New AES Keytab into Existing Keytab{C_RESET}")
+    print("================================================================================\n")
+    print("Select Existing Target Keytab:")
+    exist_kt = select_keytab_dialog()
+    if not exist_kt:
+        return
+    
+    print("\nSelect Incoming New AES Keytab:")
+    new_kt = select_keytab_dialog()
+    if not new_kt:
+        return
+    
+    if exist_kt == new_kt:
+        print(f"\n{C_RED}[ERROR] Target and source cannot be the same file.{C_RESET}")
+        press_enter()
+        return
+
+    # In-place backup
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    kdir = os.path.dirname(exist_kt)
+    kname = os.path.basename(exist_kt)
+    bname = f"{kdir}/backup/{kname}.{ts}.bak"
+    MOCK_INPLACE_BACKUPS[bname] = {"orig": exist_kt, "entries": [dict(e) for e in MOCK_KEYTABS[exist_kt]], "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+    print(f"\n{C_GREEN}[SUCCESS]{C_RESET} In-place safety backup created at: {C_YELLOW}{bname}{C_RESET}")
+    
+    # Merge entries
+    merged_entries = [dict(e) for e in MOCK_KEYTABS[exist_kt]]
+    for e in MOCK_KEYTABS[new_kt]:
+        new_entry = dict(e)
+        new_entry["slot"] = len(merged_entries) + 1
+        merged_entries.append(new_entry)
+    
+    MOCK_KEYTABS[exist_kt] = merged_entries
+    print(f"\n{C_GREEN}[SUCCESS]{C_RESET} AES Keytab merged into: {C_YELLOW}{exist_kt}{C_RESET}")
+    render_klist(exist_kt, MOCK_KEYTABS[exist_kt])
+    press_enter()
+
+def option_system_snapshots():
+    print_banner()
+    print(f"{C_BOLD}{C_CYAN}[MIGRATION] Pre-Migration System & Mount State Snapshots{C_RESET}")
+    print("================================================================================\n")
+    sel = select_keytab_dialog()
+    if not sel:
+        return
+    
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    sdir = f"{os.path.dirname(sel)}/backup/system_snapshots_{ts}"
+    MOCK_SNAPSHOTS[sdir] = {
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "target": sel,
+        "krb5_conf": "[logging]\n default = FILE:/var/log/krb5libs.log\n[libdefaults]\n default_realm = EXAMPLE.CORP",
+        "fstab": "nfs-server01.example.corp:/exports/finance /mnt/nfs_finance nfs sec=krb5 0 0",
+        "mounts": dict(MOCK_NFS_MOUNTS)
+    }
+    
+    print(f"Captured Pre-Migration Snapshots in: {C_YELLOW}{sdir}{C_RESET}\n")
+    print(f"  {C_GREEN}✓{C_RESET} Backed up: /etc/krb5.conf")
+    print(f"  {C_GREEN}✓{C_RESET} Backed up: /etc/fstab")
+    print(f"  {C_GREEN}✓{C_RESET} Captured: 'df -h' baseline snapshot")
+    print(f"  {C_GREEN}✓{C_RESET} Captured: 'mount | egrep \"nfs|cifs\"' ({len(MOCK_NFS_MOUNTS)} active shares)")
+    print(f"\n{C_GREEN}[SUCCESS]{C_RESET} System snapshots recorded successfully.")
+    press_enter()
+
+def option_nfs_transition():
+    print_banner()
+    print(f"{C_BOLD}{C_CYAN}[MIGRATION] NFS Security Transition (sec=sys <-> sec=krb5){C_RESET}")
+    print("================================================================================\n")
+    print("Select Target Security Mode:")
+    print(f"  {C_GREEN}[1]{C_RESET} Remount with 'sec=sys'  (Pre-Merge: prevent deadlocks)")
+    print(f"  {C_GREEN}[2]{C_RESET} Remount with 'sec=krb5' (Post-Merge: restore Kerberos security)")
+    print(f"  {C_RED}[0]{C_RESET} Cancel\n")
+    c = input("Enter choice [1, 2, 0]: ").strip()
+    
+    if c == "1":
+        for mp in MOCK_NFS_MOUNTS:
+            MOCK_NFS_MOUNTS[mp]["opts"] = MOCK_NFS_MOUNTS[mp]["opts"].replace("sec=krb5", "sec=sys")
+        print(f"\n{C_GREEN}[SUCCESS]{C_RESET} All active NFS mounts transitioned to 'sec=sys'.")
+    elif c == "2":
+        for mp in MOCK_NFS_MOUNTS:
+            MOCK_NFS_MOUNTS[mp]["opts"] = MOCK_NFS_MOUNTS[mp]["opts"].replace("sec=sys", "sec=krb5")
+        print(f"\n{C_GREEN}[SUCCESS]{C_RESET} All active NFS mounts transitioned to 'sec=krb5'.")
+    press_enter()
+
+def option_filesystem_sanity():
+    print_banner()
+    print(f"{C_BOLD}{C_CYAN}[MIGRATION] Filesystem Sanity & Comparison Report{C_RESET}")
+    print("================================================================================\n")
+    print(f"{C_BOLD}[1/3] Mount Table Comparison:{C_RESET}")
+    print(f"  Total Active Network Mounts: {C_GREEN}{len(MOCK_NFS_MOUNTS)}{C_RESET}")
+    for mp, info in MOCK_NFS_MOUNTS.items():
+        print(f"  {C_CYAN}•{C_RESET} {mp:<22} {info['device']:<40} {C_YELLOW}{info['opts']}{C_RESET}")
+    
+    print(f"\n{C_BOLD}[2/3] Filesystem Capacity Summary (df -h):{C_RESET}")
+    print(f"{C_BOLD}{'Filesystem':<42} {'Size':<6} {'Used':<6} {'Avail':<6} {'Use%':<6} {'Mounted on'}{C_RESET}")
+    print("--------------------------------------------------------------------------------")
+    for mp, info in MOCK_NFS_MOUNTS.items():
+        print(f"{info['device']:<42} {info['size']:<6} {info['used']:<6} {info['avail']:<6} {info['pcent']:<6} {mp}")
+    
+    print(f"\n{C_BOLD}[3/3] Live Mount Accessibility Probes:{C_RESET}")
+    for mp in MOCK_NFS_MOUNTS:
+        print(f"  Testing access to {mp:<22} ... {C_GREEN}[OK - Responsive]{C_RESET}")
+    
+    print(f"\n{C_GREEN}[SUCCESS]{C_RESET} Filesystem sanity check passed with 100% responsiveness.")
+    press_enter()
+
 def main():
     while True:
         print_banner()
         print(f" {C_BOLD}Please select an option:{C_RESET}\n")
         print(f"  {C_GREEN}[1]{C_RESET} {C_BOLD}List Keytab Files{C_RESET} in the server")
         print(f"  {C_GREEN}[2]{C_RESET} {C_BOLD}Inspect Keytab Details{C_RESET} (klist -kte for all or specific keytabs)")
-        print(f"  {C_GREEN}[3]{C_RESET} {C_BOLD}Take Backup{C_RESET} of keytab file(s) under /var/tmp")
-        print(f"  {C_GREEN}[4]{C_RESET} {C_BOLD}Add or Remove Principal{C_RESET} from a keytab file")
-        print(f"  {C_GREEN}[5]{C_RESET} {C_BOLD}Create a New Keytab File{C_RESET} (with initial principal)")
-        print(f"  {C_RED}[6]{C_RESET} {C_BOLD}Delete / Remove a Keytab File{C_RESET} (with safety backup)")
-        print(f"  {C_GREEN}[7]{C_RESET} {C_BOLD}Restore Keytab from Backup{C_RESET} (/var/tmp)")
-        print(f"  {C_RED}[8]{C_RESET} {C_BOLD}Exit{C_RESET}\n")
+        print(f"  {C_GREEN}[3]{C_RESET} {C_BOLD}Take In-Place Backup & System Snapshots{C_RESET} (/etc/krb5.conf, /etc/fstab, df -h, mount)")
+        print(f"  {C_GREEN}[4]{C_RESET} {C_BOLD}Merge New AES Keytab into Existing Keytab{C_RESET} (with 0600 permissions)")
+        print(f"  {C_GREEN}[5]{C_RESET} {C_BOLD}NFS Security Transition{C_RESET} (Remount sec=sys <-> sec=krb5)")
+        print(f"  {C_GREEN}[6]{C_RESET} {C_BOLD}Filesystem Sanity & Comparison Check{C_RESET} (Pre vs Post comparison)")
+        print(f"  {C_GREEN}[7]{C_RESET} {C_BOLD}Add or Remove Principal{C_RESET} from a keytab file")
+        print(f"  {C_GREEN}[8]{C_RESET} {C_BOLD}Create / Delete Keytab File{C_RESET}")
+        print(f"  {C_GREEN}[9]{C_RESET} {C_BOLD}Restore Keytab from Backup{C_RESET}")
+        print(f"  {C_RED}[0]{C_RESET} {C_BOLD}Exit{C_RESET}\n")
         print("================================================================================")
-        opt = input("Enter option [1-8]: ").strip()
+        opt = input("Enter option [0-9]: ").strip()
         
         if opt == "1":
             option_list_keytabs()
         elif opt == "2":
             option_klist_keytabs()
         elif opt == "3":
-            option_backup_keytabs()
+            option_system_snapshots()
         elif opt == "4":
-            option_modify_keytab()
+            option_merge_keytabs()
         elif opt == "5":
-            option_create_keytab()
+            option_nfs_transition()
         elif opt == "6":
-            option_delete_keytab()
+            option_filesystem_sanity()
         elif opt == "7":
-            option_restore_keytab()
+            option_modify_keytab()
         elif opt == "8":
+            sub_opt = input("\n[1] Create New Keytab [2] Delete Keytab [0] Cancel: ").strip()
+            if sub_opt == "1":
+                option_create_keytab()
+            elif sub_opt == "2":
+                option_delete_keytab()
+        elif opt == "9":
+            option_restore_keytab()
+        elif opt in ["0", "exit", "q"]:
             print(f"\n{C_CYAN}[INFO]{C_RESET} Exiting Simulator. Goodbye!")
             sys.exit(0)
 

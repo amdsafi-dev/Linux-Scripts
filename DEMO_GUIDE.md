@@ -118,10 +118,41 @@ Safely remove all entries matching `dummy_analyst/node01.example.corp@EXAMPLE.CO
 
 ---
 
-## 🔄 Automated One-Shot Verification
+## 🧪 Scenario 4: AES Keytab Merge & NFS Mount Migration (`keytab_merge_migrator.sh`)
 
-To run an automated non-interactive verification script that runs through all 3 scenarios:
+### Objective
+Execute an enterprise zero-downtime keytab upgrade by merging an incoming AES keytab into an existing keytab, taking in-place backups, capturing pre-migration system state (`/etc/krb5.conf`, `/etc/fstab`, `df -h`, `mount | egrep "nfs|cifs"`), transitioning NFS shares through `sec=sys` -> `sec=krb5`, and running an automated filesystem sanity check.
 
-```bash
-python simulation/test_demo_flow.py
-```
+### Step-by-Step Execution:
+1. **Launch the Migrator**:
+   ```bash
+   chmod +x keytab_merge_migrator.sh
+   sudo ./keytab_merge_migrator.sh
+   ```
+2. **Step 1: Snapshots & In-Place Backups** (Option `1`):
+   - Select target keytab: `/etc/security/keytabs/nfs_service.keytab`.
+   - In-place backup created: `/etc/security/keytabs/backup/nfs_service.keytab.<timestamp>.bak` (`0600`).
+   - System state captured in `/etc/security/keytabs/backup/system_snapshots_<timestamp>/`.
+3. **Step 2: Transition NFS to `sec=sys`** (Option `2`):
+   - Active Kerberized NFS shares are safely remounted with `sec=sys` to prevent I/O deadlocks during keytab rollover.
+4. **Step 3: Merge AES Keytab** (Option `3`):
+   - Target: `/etc/security/keytabs/nfs_service.keytab`
+   - Source: `/tmp/incoming_keytabs/new_aes_nfs.keytab`
+   - `ktutil` merges entries and preserves exact original ownership and `0600` permissions.
+5. **Step 4: Remount NFS with `sec=krb5`** (Option `4`):
+   - Restores Kerberos encryption on active NFS shares.
+6. **Step 5: Filesystem Sanity Check** (Option `5`):
+   - Captures post-migration state, compares `df -h` and `mount` tables against pre-migration baseline, and performs live responsiveness probes on all mount points.
+
+---
+
+## 🔄 Automated Validation Scripts
+
+- **Test General Keytab Manager**:
+  ```bash
+  ./test_keytab_manager.sh
+  ```
+- **Test AES Merge & NFS Migrator**:
+  ```bash
+  python simulation/test_merge_flow.py
+  ```

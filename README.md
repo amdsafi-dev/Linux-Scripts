@@ -1,60 +1,43 @@
-# Kerberos Keytab Manager for RHEL 7+
+# Kerberos Keytab Manager & AES NFS Migrator for RHEL 7+
 
-A production-grade, interactive Bash utility for managing MIT Kerberos Keytab files on Red Hat Enterprise Linux (RHEL 7, 8, 9), CentOS, Rocky Linux, and AlmaLinux.
+A production-grade, interactive Bash suite for managing MIT Kerberos Keytab files and executing zero-downtime **AES Encryption Merges & Kerberized NFS Mount Migrations** on Red Hat Enterprise Linux (RHEL 7, 8, 9), CentOS, Rocky Linux, and AlmaLinux.
 
-Accompanied by a containerized **RHEL Simulation Environment** and an automated validation test suite.
+Accompanied by a containerized **RHEL Simulation Environment**, an automated validation test suite, and a standalone Python simulator.
 
 ---
 
-## 🌟 Key Features
+## 🌟 Utilities Included
 
-1. **List Keytab Files in Server**:
-   - Automatically scans standard locations (`/etc/krb5.keytab`, `/etc/security/keytabs/`, `/var/kerberos/`, `/etc/hadoop/`, `/etc/hive/`, etc.).
-   - Supports deep full-filesystem search across `/`.
-   - Displays file size, owner, group, and octal permissions (`0600`, `0400`).
+### 1. `keytab_merge_migrator.sh` (AES Keytab Merge & NFS Migration Utility)
+Specialized enterprise utility for merging incoming AES keytabs into production keytabs while managing NFS mount security:
+- **In-Place Keytab Backup**: Automatically archives keytabs inside `$(dirname "$keytab")/backup/` with strict `0600` permissions and SHA256 integrity logging.
+- **Pre-Migration Snapshots**: Backs up `/etc/krb5.conf`, `/etc/fstab`, and captures baseline states of `df -h` and `mount | egrep "nfs|cifs"`.
+- **NFS Pre-Merge Transition (`sec=sys`)**: Remounts active Kerberized NFS shares with `sec=sys` before modifying keytabs to prevent I/O deadlocks.
+- **Atomic AES Merge via `ktutil`**: Merges new AES encryption entries (`aes256-cts-hmac-sha1-96`, `aes128-cts-hmac-sha1-96`) into the production keytab while strictly preserving original owner, group, and permissions (`0600`/`0400`).
+- **NFS Post-Merge Transition (`sec=krb5`)**: Remounts NFS shares back with Kerberos security (`sec=krb5`, `sec=krb5i`, `sec=krb5p`).
+- **Filesystem Sanity & Comparison Engine**: Automatically compares pre vs post `df -h` and mount tables, diffs option changes, and runs live responsiveness probes against all mount points.
+- **Guided Migration Wizard**: Executes the entire 5-step migration safely with step-by-step confirmation.
 
-2. **Inspect Keytab Content (`klist -kte`)**:
-   - Inspect all discovered keytabs at once or select a specific keytab.
-   - Shows Key Version Number (KVNO), Timestamp, Principal Name, and Encryption Type (AES-256, AES-128, RC4).
-
-3. **Take Backup of Keytab Files (`/var/tmp`)**:
-   - Backs up single or all keytabs to `/var/tmp/keytab_backups/<keytab>.<timestamp>.bak`.
-   - Preserves strict file permissions (`0600`) and metadata.
-   - Generates SHA256 checksums in `backup_manifest.log` for integrity tracking.
-
-4. **Add or Remove Principal from Keytab**:
-   - **Safety First**: Automatically prompts to create a safety backup before applying any modification.
-   - **Add Principal**: Guided step-by-step wizard (Principal name, KVNO, encryption types `aes256-cts-hmac-sha1-96`, `aes128-cts`, `arcfour-hmac`, and password with verification).
-   - **Remove Principal**: Remove by exact slot index or bulk remove all entries matching a principal name.
-   - Uses `ktutil` with atomic temp-file write and validation.
-
-5. **Create a New Keytab File**:
-   - Creates a brand new keytab from scratch at any specified file path.
-   - Auto-creates parent directories and guides initial principal/password setup.
-   - Sets secure `0600` permissions and validates with `klist -kte`.
-
-6. **Delete / Remove an Existing Keytab File**:
-   - Prompts for keytab file selection and shows current entries.
-   - Automatically offers to create an immediate safety backup in `/var/tmp/keytab_backups`.
-   - Double-confirms deletion before removing the file.
-
-7. **Restore from Backup**:
-   - Discovers all backups in `/var/tmp` and `/var/tmp/keytab_backups`.
-   - Inspects backup content before restoring.
-   - Confirms overwrite and applies secure permissions (`0600`).
+### 2. `keytab_manager.sh` (General Keytab Administration Utility)
+- Discovers keytabs in standard paths (`/etc/krb5.keytab`, `/etc/security/keytabs/`, `/var/kerberos/`, `/etc/hadoop/`, etc.) or via full system scan.
+- Inspects keytabs with formatted `klist -kte`.
+- Creates backups to `/var/tmp/keytab_backups`.
+- Adds or removes principals interactively by slot number or principal name.
+- Creates brand new keytab files from scratch or deletes obsolete keytabs.
+- Restores corrupted keytabs from backup archives.
 
 ---
 
 ## 🚀 Quickstart & Usage
 
-### 1. Running directly on RHEL 7 / 8 / 9 / CentOS / Rocky / AlmaLinux
-
-Ensure `krb5-workstation` is installed:
+### 1. Running Keytab AES Merge & NFS Migrator
 ```bash
-# RHEL 7 / 8 / 9 / Rocky / AlmaLinux / CentOS
-sudo yum install -y krb5-workstation
+chmod +x keytab_merge_migrator.sh
+sudo ./keytab_merge_migrator.sh
+```
 
-# Make executable and run
+### 2. Running General Keytab Manager
+```bash
 chmod +x keytab_manager.sh
 sudo ./keytab_manager.sh
 ```
