@@ -482,11 +482,64 @@ run_filesystem_sanity_check() {
 }
 
 # ------------------------------------------------------------------------------
-# MENU OPTION 1: Pre-Migration Snapshots & In-Place Backups
+# MENU OPTION 1: View / Inspect Keytab Details (klist -kte)
+# ------------------------------------------------------------------------------
+option_inspect_keytab() {
+    print_banner
+    echo -e "${C_BOLD}${C_CYAN}[OPTION 1] View / Inspect Keytab Details (klist -kte)${C_RESET}"
+    echo "================================================================================"
+    echo ""
+    echo -e "  ${C_GREEN}[1]${C_RESET} Inspect ALL Discovered Keytabs"
+    echo -e "  ${C_GREEN}[2]${C_RESET} Select a SPECIFIC Keytab"
+    echo -e "  ${C_RED}[0]${C_RESET} Cancel\n"
+
+    read -r -p "Enter choice [1, 2, 0]: " ins_opt
+    ins_opt=$(echo "$ins_opt" | xargs)
+
+    case "$ins_opt" in
+        1)
+            echo ""
+            local any_found=0
+            while IFS= read -r kt_path; do
+                if [[ -n "$kt_path" && -f "$kt_path" ]]; then
+                    any_found=1
+                    echo -e "${C_BOLD}${C_BLUE}======================================================================${C_RESET}"
+                    echo -e "${C_BOLD}Keytab File : ${C_YELLOW}$kt_path${C_RESET} ${C_DIM}(perms: $(stat -c '%a, %U:%G' "$kt_path" 2>/dev/null || echo '0600'))${C_RESET}"
+                    echo -e "${C_BOLD}${C_BLUE}======================================================================${C_RESET}"
+                    klist -kte "$kt_path" 2>&1
+                    echo ""
+                fi
+            done < <(discover_keytabs)
+
+            if [[ $any_found -eq 0 ]]; then
+                msg_warn "No standard keytab files found on this system."
+            fi
+            ;;
+        2)
+            echo ""
+            if select_keytab_dialog "Select Keytab to Inspect"; then
+                local chosen_kt="$SELECTED_KEYTAB"
+                echo ""
+                echo -e "${C_BOLD}${C_BLUE}======================================================================${C_RESET}"
+                echo -e "${C_BOLD}Keytab File : ${C_YELLOW}$chosen_kt${C_RESET} ${C_DIM}(perms: $(stat -c '%a, %U:%G' "$chosen_kt" 2>/dev/null || echo '0600'))${C_RESET}"
+                echo -e "${C_BOLD}${C_BLUE}======================================================================${C_RESET}"
+                klist -kte "$chosen_kt" 2>&1
+                echo ""
+            fi
+            ;;
+        *)
+            return
+            ;;
+    esac
+    press_enter
+}
+
+# ------------------------------------------------------------------------------
+# MENU OPTION 2: Pre-Migration Snapshots & In-Place Backups
 # ------------------------------------------------------------------------------
 option_pre_migration_snapshots() {
     print_banner
-    echo -e "${C_BOLD}${C_CYAN}[OPTION 1] Pre-Migration Snapshots & In-Place Backups${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}[OPTION 2] Pre-Migration Snapshots & In-Place Backups${C_RESET}"
     echo "================================================================================"
     echo ""
 
@@ -511,11 +564,11 @@ option_pre_migration_snapshots() {
 }
 
 # ------------------------------------------------------------------------------
-# MENU OPTION 2: NFS Remount sec=sys (Pre-Merge)
+# MENU OPTION 3: NFS Remount sec=sys (Pre-Merge)
 # ------------------------------------------------------------------------------
 option_nfs_remount_sys() {
     print_banner
-    echo -e "${C_BOLD}${C_CYAN}[OPTION 2] NFS Transition: Remount with sec=sys (Pre-Merge)${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}[OPTION 3] NFS Transition: Remount with sec=sys (Pre-Merge)${C_RESET}"
     echo "================================================================================"
     echo ""
     echo "This operation safely switches active NFS shares to standard UNIX security (sec=sys)"
@@ -526,11 +579,11 @@ option_nfs_remount_sys() {
 }
 
 # ------------------------------------------------------------------------------
-# MENU OPTION 3: Merge New AES Keytab into Existing Keytab
+# MENU OPTION 4: Merge New AES Keytab into Existing Keytab
 # ------------------------------------------------------------------------------
 option_merge_keytabs() {
     print_banner
-    echo -e "${C_BOLD}${C_CYAN}[OPTION 3] Merge New AES Keytab into Existing Keytab${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}[OPTION 4] Merge New AES Keytab into Existing Keytab${C_RESET}"
     echo "================================================================================"
     echo ""
 
@@ -559,11 +612,11 @@ option_merge_keytabs() {
 }
 
 # ------------------------------------------------------------------------------
-# MENU OPTION 4: NFS Remount sec=krb5 (Post-Merge)
+# MENU OPTION 5: NFS Remount sec=krb5 (Post-Merge)
 # ------------------------------------------------------------------------------
 option_nfs_remount_krb5() {
     print_banner
-    echo -e "${C_BOLD}${C_CYAN}[OPTION 4] NFS Transition: Remount with sec=krb5 (Post-Merge)${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}[OPTION 5] NFS Transition: Remount with sec=krb5 (Post-Merge)${C_RESET}"
     echo "================================================================================"
     echo ""
     echo "This operation remounts active NFS shares with Kerberos security (sec=krb5)"
@@ -574,11 +627,11 @@ option_nfs_remount_krb5() {
 }
 
 # ------------------------------------------------------------------------------
-# MENU OPTION 5: Filesystem Sanity & Comparison Check
+# MENU OPTION 6: Filesystem Sanity & Comparison Check
 # ------------------------------------------------------------------------------
 option_filesystem_sanity() {
     print_banner
-    echo -e "${C_BOLD}${C_CYAN}[OPTION 5] Filesystem Sanity & Comparison Check${C_RESET}"
+    echo -e "${C_BOLD}${C_CYAN}[OPTION 6] Filesystem Sanity & Comparison Check${C_RESET}"
     echo "================================================================================"
     echo ""
     run_filesystem_sanity_check "$LAST_SNAPSHOT_DIR"
@@ -586,11 +639,11 @@ option_filesystem_sanity() {
 }
 
 # ------------------------------------------------------------------------------
-# MENU OPTION 6: Rollback / Restore Keytab & Configs
+# MENU OPTION 7: Rollback / Restore Keytab & Configs
 # ------------------------------------------------------------------------------
 option_rollback() {
     print_banner
-    echo -e "${C_BOLD}${C_RED}[OPTION 6] Rollback / Restore from In-Place Backup${C_RESET}"
+    echo -e "${C_BOLD}${C_RED}[OPTION 7] Rollback / Restore from In-Place Backup${C_RESET}"
     echo "================================================================================"
     echo ""
 
@@ -650,7 +703,7 @@ option_rollback() {
 }
 
 # ------------------------------------------------------------------------------
-# MENU OPTION 7: Guided End-to-End Automated Migration Wizard
+# MENU OPTION 8: Guided End-to-End Automated Migration Wizard
 # ------------------------------------------------------------------------------
 option_guided_wizard() {
     print_banner
@@ -720,47 +773,51 @@ main_menu() {
     while true; do
         print_banner
         echo -e " ${C_BOLD}Please select an operation:${C_RESET}\n"
-        echo -e "  ${C_GREEN}[1]${C_RESET} ${C_BOLD}Pre-Migration Snapshots & In-Place Backups${C_RESET}"
+        echo -e "  ${C_GREEN}[1]${C_RESET} ${C_BOLD}View / Inspect Keytab Details (klist -kte)${C_RESET}"
+        echo -e "      ${C_DIM}• Inspect single or all keytab entries and encryption ciphers${C_RESET}"
+        echo ""
+        echo -e "  ${C_GREEN}[2]${C_RESET} ${C_BOLD}Pre-Migration Snapshots & In-Place Backups${C_RESET}"
         echo -e "      ${C_DIM}• In-place keytab backup in <keytab_dir>/backup/${C_RESET}"
         echo -e "      ${C_DIM}• Backup /etc/krb5.conf, /etc/fstab, df -h, mount | egrep 'nfs|cifs'${C_RESET}"
         echo ""
-        echo -e "  ${C_GREEN}[2]${C_RESET} ${C_BOLD}NFS Transition: Remount with 'sec=sys'${C_RESET} (Pre-Merge)"
+        echo -e "  ${C_GREEN}[3]${C_RESET} ${C_BOLD}NFS Transition: Remount with 'sec=sys'${C_RESET} (Pre-Merge)"
         echo -e "      ${C_DIM}• Prevent I/O deadlocks during keytab/credential update${C_RESET}"
         echo ""
-        echo -e "  ${C_GREEN}[3]${C_RESET} ${C_BOLD}Merge New AES Keytab into Existing Keytab${C_RESET}"
+        echo -e "  ${C_GREEN}[4]${C_RESET} ${C_BOLD}Merge New AES Keytab into Existing Keytab${C_RESET}"
         echo -e "      ${C_DIM}• Atomic merge via ktutil with exact permission & ownership preservation${C_RESET}"
         echo ""
-        echo -e "  ${C_GREEN}[4]${C_RESET} ${C_BOLD}NFS Transition: Remount with 'sec=krb5'${C_RESET} (Post-Merge)"
+        echo -e "  ${C_GREEN}[5]${C_RESET} ${C_BOLD}NFS Transition: Remount with 'sec=krb5'${C_RESET} (Post-Merge)"
         echo -e "      ${C_DIM}• Restore Kerberos security on NFS shares after merge${C_RESET}"
         echo ""
-        echo -e "  ${C_GREEN}[5]${C_RESET} ${C_BOLD}Filesystem Sanity & Comparison Check${C_RESET}"
+        echo -e "  ${C_GREEN}[6]${C_RESET} ${C_BOLD}Filesystem Sanity & Comparison Check${C_RESET}"
         echo -e "      ${C_DIM}• Automated Pre vs Post diff comparison & mount accessibility check${C_RESET}"
         echo ""
-        echo -e "  ${C_RED}[6]${C_RESET} ${C_BOLD}Rollback / Restore from In-Place Backup${C_RESET}"
+        echo -e "  ${C_RED}[7]${C_RESET} ${C_BOLD}Rollback / Restore from In-Place Backup${C_RESET}"
         echo -e "      ${C_DIM}• Instant recovery of keytab, configs, and mounts${C_RESET}"
         echo ""
-        echo -e "  ${C_CYAN}[7]${C_RESET} ${C_BOLD}Guided End-to-End Migration Wizard${C_RESET} (Steps 1 -> 5)"
-        echo -e "  ${C_RED}[8]${C_RESET} ${C_BOLD}Exit${C_RESET}"
+        echo -e "  ${C_CYAN}[8]${C_RESET} ${C_BOLD}Guided End-to-End Migration Wizard${C_RESET} (Steps 1 -> 5)"
+        echo -e "  ${C_RED}[9]${C_RESET} ${C_BOLD}Exit${C_RESET}"
         echo ""
         echo "================================================================================"
-        read -r -p "Enter option [1-8]: " user_opt
+        read -r -p "Enter option [1-9]: " user_opt
         user_opt=$(echo "$user_opt" | xargs)
 
         case "$user_opt" in
-            1) option_pre_migration_snapshots ;;
-            2) option_nfs_remount_sys ;;
-            3) option_merge_keytabs ;;
-            4) option_nfs_remount_krb5 ;;
-            5) option_filesystem_sanity ;;
-            6) option_rollback ;;
-            7) option_guided_wizard ;;
-            8|0|[qQ]|"exit")
+            1) option_inspect_keytab ;;
+            2) option_pre_migration_snapshots ;;
+            3) option_nfs_remount_sys ;;
+            4) option_merge_keytabs ;;
+            5) option_nfs_remount_krb5 ;;
+            6) option_filesystem_sanity ;;
+            7) option_rollback ;;
+            8) option_guided_wizard ;;
+            9|0|[qQ]|"exit")
                 echo ""
                 msg_info "Exiting Keytab & NFS Migration Utility. Goodbye!"
                 exit 0
                 ;;
             *)
-                msg_error "Invalid option '$user_opt'. Please choose 1 to 8."
+                msg_error "Invalid option '$user_opt'. Please choose 1 to 9."
                 sleep 1.2
                 ;;
         esac
