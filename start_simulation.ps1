@@ -28,12 +28,14 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "[2/3] Choose Startup Mode:" -ForegroundColor Cyan
-Write-Host "  [1] Launch Interactive Keytab Manager directly (./keytab_manager.sh)" -ForegroundColor Green
-Write-Host "  [2] Launch Automated Test Suite (./test_keytab_manager.sh)" -ForegroundColor Green
-Write-Host "  [3] Open Interactive RHEL Bash Shell (explore / test manually)" -ForegroundColor Green
+Write-Host "  [1] Launch General Keytab Manager (./keytab_manager.sh)" -ForegroundColor Green
+Write-Host "  [2] Launch AES Keytab Merge & NFS Migrator (./keytab_merge_migrator.sh)" -ForegroundColor Green
+Write-Host "  [3] Run General Keytab Manager Test Suite (./test_keytab_manager.sh)" -ForegroundColor Green
+Write-Host "  [4] Run AES Keytab Merge Test Suite (./test_keytab_merge.sh)" -ForegroundColor Green
+Write-Host "  [5] Open Interactive RHEL 9 Bash Shell" -ForegroundColor Green
 Write-Host ""
 
-$choice = Read-Host "Select option [1, 2, 3 - Default: 1]"
+$choice = Read-Host "Select option [1-5 - Default: 1]"
 if ([string]::IsNullOrWhiteSpace($choice)) { $choice = "1" }
 
 Write-Host ""
@@ -44,15 +46,27 @@ switch ($choice) {
         docker run -it --rm `
             -v "${PWD}:/workspace" `
             -w /workspace `
-            rhel-keytab-sim bash -c "chmod +x /workspace/keytab_manager.sh && /workspace/keytab_manager.sh"
+            rhel-keytab-sim bash -c "sed -i 's/\r$//' /workspace/*.sh /workspace/simulation/*.sh && chmod +x /workspace/*.sh /workspace/simulation/*.sh && /workspace/keytab_manager.sh"
     }
     "2" {
         docker run -it --rm `
             -v "${PWD}:/workspace" `
             -w /workspace `
-            rhel-keytab-sim bash -c "chmod +x /workspace/*.sh && /workspace/test_keytab_manager.sh"
+            rhel-keytab-sim bash -c "sed -i 's/\r$//' /workspace/*.sh /workspace/simulation/*.sh && chmod +x /workspace/*.sh /workspace/simulation/*.sh && /workspace/keytab_merge_migrator.sh"
     }
     "3" {
+        docker run -it --rm `
+            -v "${PWD}:/workspace" `
+            -w /workspace `
+            rhel-keytab-sim bash -c "sed -i 's/\r$//' /workspace/*.sh /workspace/simulation/*.sh && chmod +x /workspace/*.sh /workspace/simulation/*.sh && /workspace/test_keytab_manager.sh"
+    }
+    "4" {
+        docker run -it --rm `
+            -v "${PWD}:/workspace" `
+            -w /workspace `
+            rhel-keytab-sim bash -c "sed -i 's/\r$//' /workspace/*.sh /workspace/simulation/*.sh && chmod +x /workspace/*.sh /workspace/simulation/*.sh && /workspace/test_keytab_merge.sh"
+    }
+    "5" {
         docker run -it --rm `
             -v "${PWD}:/workspace" `
             -w /workspace `
@@ -62,6 +76,6 @@ switch ($choice) {
         docker run -it --rm `
             -v "${PWD}:/workspace" `
             -w /workspace `
-            rhel-keytab-sim bash -c "chmod +x /workspace/keytab_manager.sh && /workspace/keytab_manager.sh"
+            rhel-keytab-sim bash -c "sed -i 's/\r$//' /workspace/*.sh /workspace/simulation/*.sh && chmod +x /workspace/*.sh /workspace/simulation/*.sh && /workspace/keytab_manager.sh"
     }
 }
